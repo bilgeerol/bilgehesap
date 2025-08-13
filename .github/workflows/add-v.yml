@@ -1,0 +1,48 @@
+name: Append "v" to title
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-html:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set target file path
+        run: |
+          echo "FILES='html/index.html'" >> $GITHUB_ENV
+
+      - name: Append v to HTML title
+        run: |
+          set -e
+          for f in $FILES; do
+            if [ -f "$f" ]; then
+              if grep -q "hesap makinesi v" "$f"; then
+                echo "[$f] zaten 'hesap makinesi v' içeriyor, değiştirmiyorum."
+              else
+                sed -i 's/hesap makinesi/hesap makinesi v/g' "$f"
+                echo "[$f] içine ' v' eklendi."
+              fi
+            else
+              echo "Dosya bulunamadı: $f"
+              exit 1
+            fi
+          done
+
+      - name: Commit & push changes
+        run: |
+          if git diff --quiet; then
+            echo "Commitlenecek değişiklik yok."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Append 'v' to 'hesap makinesi' via workflow"
+            git push
+
