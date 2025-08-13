@@ -1,48 +1,54 @@
-name: Append "v" to title
-
+name: Nginx Static Deploy
+ 
 on:
+
   push:
-    branches: [ "main" ]
 
-permissions:
-  contents: write
-
+    branches: [main]
+ 
 jobs:
-  patch-html:
+
+  deploy:
+
     runs-on: ubuntu-latest
+ 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Set target file path
-        run: |
-          echo "FILES='html/index.html'" >> $GITHUB_ENV
+    - name: Checkout code
 
-      - name: Append v to HTML title
-        run: |
-          set -e
-          for f in $FILES; do
-            if [ -f "$f" ]; then
-              if grep -q "hesap makinesi v" "$f"; then
-                echo "[$f] zaten 'hesap makinesi v' içeriyor, değiştirmiyorum."
-              else
-                sed -i 's/hesap makinesi/hesap makinesi v/g' "$f"
-                echo "[$f] içine ' v' eklendi."
-              fi
-            else
-              echo "Dosya bulunamadı: $f"
-              exit 1
-            fi
-          done
+      uses: actions/checkout@v3
+ 
+    - name: Login to Docker Hub
 
-      - name: Commit & push changes
-        run: |
-          if git diff --quiet; then
-            echo "Commitlenecek değişiklik yok."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "Append 'v' to 'hesap makinesi' via workflow"
-            git push
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+ 
+    - name: Build and Push Docker image
 
+      run: |
+
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/hesapmakinesi:latest .
+
+        docker push ${{ secrets.DOCKER_USERNAME }}/hesapmakinesi:latest
+ 
+    - name: Deploy to VPS via SSH
+
+      uses: appleboy/ssh-action@v1.0.0
+
+      with:
+
+        host: ${{ secrets.VPS_HOST }}
+
+        username: ${{ secrets.VPS_USER }}
+
+        key: ${{ secrets.VPS_SSH_KEY }}
+
+        script: |
+
+          docker pull ${{ secrets.DOCKER_USERNAME }}/hesapmakinesi:latest
+
+          docker stop mynginx || true
+
+          docker rm mynginx || true
+
+          docker run -d --name mynginx -p 80:80 ${{ secrets.DOCKER_USERNAME }}/hesapmakinesi:latest
+ 
